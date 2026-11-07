@@ -1,10 +1,8 @@
-// Paste YOUR config from Firebase console > Project settings > Your apps.
-// These values are safe to be public. The Firestore rules are what protect your data.
 export const firebaseConfig = {
-  apiKey: "PASTE_HERE",
-  authDomain: "PASTE_HERE",
-  projectId: "PASTE_HERE",
-  storageBucket: "PASTE_HERE",
-  messagingSenderId: "PASTE_HERE",
-  appId: "PASTE_HERE"
+  apiKey: "AIzaSyBhXz_vmuYUn1FCU1VET-q-Go2E1hhHiyY",
+  authDomain: "stag-smi.firebaseapp.com",
+  projectId: "stag-smi",
+  storageBucket: "stag-smi.firebasestorage.app",
+  messagingSenderId: "275965513076",
+  appId: "1:275965513076:web:2bb91f3e9340752469f021"
 };
