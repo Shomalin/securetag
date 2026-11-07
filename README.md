@@ -1,3 +1,7 @@
-# SecureTag MVP
-Run locally: VS Code + Live Server extension, right-click index.html > Open with Live Server.
-(Pages use ES modules, so opening the file by double-click will not work.)
+# **SecureTag Smart Solutions**
+SecureTag Smart Solutions - A feasibility study on an innovation for lost and found.  
+    _"Secure what matters. Recover with ease."_
+
+## Product Concept
+QR/NFC smart tags connected to a web-based item recovery platform.
+
