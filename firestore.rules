@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    match /tags/{tagId} {
+      allow get: if true;                                    // finders can open one tag by its ID
+      allow list: if request.auth != null && resource.data.ownerId == request.auth.uid;
+      allow create, delete: if false;                        // tags are created by you in the console (admin page later)
+      allow update: if request.auth != null
+        && request.resource.data.ownerId == request.auth.uid
+        && (resource.data.ownerId == request.auth.uid        // owner edits own tag
+            || (resource.data.ownerId == null && request.resource.data.status == 'active')); // first activation
+    }
+
+    match /messages/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['tagId','ownerId','text','contact','read','createdAt'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
+        && request.resource.data.contact is string && request.resource.data.contact.size() <= 100
+        && request.resource.data.read == false
+        && get(/databases/$(db)/documents/tags/$(request.resource.data.tagId)).data.ownerId == request.resource.data.ownerId
+        && get(/databases/$(db)/documents/tags/$(request.resource.data.tagId)).data.status in ['active','lost'];
+      allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.ownerId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if false;
+    }
+
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

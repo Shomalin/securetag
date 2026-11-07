@@ -1,14 +1,13 @@
-import { currentUser, logout, myTags, claimTag, setStatus, myMessages, markRead } from './store.js';
+import { waitForUser, logout, claimTag, setStatus, markRead, watch } from './store.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const me = currentUser();
-if (!me) location.href = 'login.html';
-$('hi').textContent = 'Hi, ' + me.name;
-$('out').onclick = () => { logout(); location.href = 'index.html'; };
+const user = await waitForUser();
+if (!user) location.href = 'login.html';
+$('hi').textContent = 'Hi, ' + (user.displayName || 'owner');
+$('out').onclick = async () => { await logout(); location.href = 'index.html'; };
 const base = location.href.replace(/[^/]*$/, '') + 'finder.html?t=';
 
-async function render() {
-  const tags = await myTags(), msgs = await myMessages();
+function render(tags, msgs) {
   $('tags').innerHTML = tags.length ? tags.map(t => `<div class="panel"><div class="row">
     <div><strong>${esc(t.itemName)}</strong> <span class="pill ${t.status}">${t.status}</span>
     <div class="muted">${esc(base + t.id)}</div></div>
@@ -23,15 +22,15 @@ async function render() {
 }
 document.addEventListener('click', async e => {
   const d = e.target.dataset;
-  if (d.toggle) await setStatus(d.toggle, d.s === 'lost' ? 'active' : 'lost');
-  if (d.read) await markRead(d.read);
-  if (d.copy) { navigator.clipboard.writeText(base + d.copy); return; }
-  render();
+  try {
+    if (d.toggle) await setStatus(d.toggle, d.s === 'lost' ? 'active' : 'lost');
+    if (d.read) await markRead(d.read);
+    if (d.copy) navigator.clipboard.writeText(base + d.copy);
+  } catch (err) { alert(err.message); }
 });
 $('add').onclick = async () => {
   try { await claimTag($('tid').value.trim(), $('iname').value.trim() || 'My item', $('note').value.trim());
-    $('tid').value = $('iname').value = $('note').value = ''; $('addErr').hidden = true; render();
+    $('tid').value = $('iname').value = $('note').value = ''; $('addErr').hidden = true;
   } catch (e) { $('addErr').textContent = e.message; $('addErr').hidden = false; }
 };
-render();
-setInterval(render, 4000); // stand-in for Firebase live updates
+watch(user.uid, render); // live: no refresh or polling needed
