@@ -2,14 +2,33 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{db}/documents {
 
+    function isAdmin() {
+      return request.auth != null && exists(/databases/$(db)/documents/admins/$(request.auth.uid));
+    }
+
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;                       // add admins by hand in the console
+    }
+
     match /tags/{tagId} {
-      allow get: if true;                                    // finders can open one tag by its ID
+      allow get: if true;
       allow list: if request.auth != null && resource.data.ownerId == request.auth.uid;
-      allow create, delete: if false;                        // tags are created by you in the console (admin page later)
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['itemName','ownerId','publicNote','status','batch','createdAt'])
+        && request.resource.data.status == 'unclaimed'
+        && request.resource.data.ownerId == null;
+      allow delete: if false;
+      // owner: activate or edit own tag, but never a disabled one
       allow update: if request.auth != null
         && request.resource.data.ownerId == request.auth.uid
-        && (resource.data.ownerId == request.auth.uid        // owner edits own tag
-            || (resource.data.ownerId == null && request.resource.data.status == 'active')); // first activation
+        && (resource.data.ownerId == request.auth.uid || resource.data.ownerId == null)
+        && resource.data.status != 'disabled'
+        && request.resource.data.status in ['active','lost'];
+      // admin: may only change status (disable / enable)
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
     }
 
     match /messages/{id} {
