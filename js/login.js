@@ -1,17 +1,28 @@
 import { login, register } from './store.js';
-const $ = id => document.getElementById(id);
-let signup = false;
-$('swap').onclick = e => {
-  e.preventDefault(); signup = !signup;
-  $('title').textContent = signup ? 'Create account' : 'Log in';
-  $('go').textContent = signup ? 'Create account' : 'Log in';
-  $('swap').textContent = signup ? 'Have an account? Log in' : 'New here? Create an account';
-  $('name').hidden = $('nl').hidden = !signup;
+import { $, showBanner } from './ui.js';
+
+let creatingAccount = false;
+
+// Switch between "Log in" and "Create account"
+$('switch').onclick = event => {
+  event.preventDefault();
+  creatingAccount = !creatingAccount;
+
+  $('title').textContent  = creatingAccount ? 'Create account' : 'Log in';
+  $('submit').textContent = creatingAccount ? 'Create account' : 'Log in';
+  $('switch').textContent = creatingAccount ? 'Have an account? Log in' : 'New here? Create an account';
+  $('name').hidden = $('nameLabel').hidden = !creatingAccount;
 };
-$('go').onclick = async () => {
+
+$('submit').onclick = async () => {
+  const email = $('email').value.trim();
+  const password = $('password').value;
+
   try {
-    if (signup) await register($('name').value.trim(), $('email').value.trim(), $('pw').value);
-    else await login($('email').value.trim(), $('pw').value);
+    if (creatingAccount) await register($('name').value.trim(), email, password);
+    else await login(email, password);
     location.href = 'dashboard.html';
-  } catch (e) { $('err').textContent = e.message; $('err').hidden = false; }
+  } catch (error) {
+    showBanner($('error'), error.message);
+  }
 };

@@ -1,10 +1,47 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;600&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/styles.css"><title>My tags</title></head><body>
-<div class="wrap"><nav><a class="logo" href="index.html">SecureTag</a><button class="btn sm alt" id="out">Log out</button></nav>
-<h1 style="font-size:2rem" id="hi">My tags</h1>
-<div class="panel"><h2 style="font-size:1.2rem">Activate a tag</h2>
-<label for="tid">Tag ID (from the packaging or the tag link)</label><input id="tid" placeholder="demo-wallet-01">
-<label for="iname">What is it attached to?</label><input id="iname" placeholder="Black wallet">
-<label for="note">Note for the finder (optional)</label><input id="note" placeholder="Reward offered" maxlength="120">
-<p><button class="btn" id="add">Activate tag</button></p><div id="addErr" class="banner lost" hidden></div></div>
-<h2>Tags</h2><div id="tags"></div><h2>Messages</h2><div class="panel" id="msgs"></div></div>
-<script type="module" src="js/dashboard.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <title>My tags</title>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="index.html">SecureTag</a>
+      <button class="btn sm alt" id="logout">Log out</button>
+    </nav>
+    <h1 style="font-size: 2rem;" id="greeting">My tags</h1>
+
+    <div class="panel">
+      <h2 style="font-size: 1.2rem;">Activate a tag</h2>
+      <p class="muted">You will find the tag ID and the claim code on the packaging.</p>
+
+      <label for="tagId">Tag ID</label>
+      <input id="tagId" placeholder="k7x9qm2pla" autocapitalize="off">
+
+      <label for="claimCode">Claim code</label>
+      <input id="claimCode" placeholder="ABCD-EFGH" autocapitalize="characters">
+
+      <label for="itemName">What is it attached to?</label>
+      <input id="itemName" placeholder="Black wallet">
+
+      <label for="publicNote">Note for the finder (optional)</label>
+      <input id="publicNote" placeholder="Reward offered" maxlength="120">
+
+      <p><button class="btn" id="activate">Activate tag</button></p>
+      <div id="activateError" class="banner lost" hidden></div>
+    </div>
+
+    <h2>Tags</h2>
+    <div id="tags"></div>
+
+    <h2>Messages</h2>
+    <div class="panel" id="messages"></div>
+  </div>
+  <script type="module" src="js/dashboard.js"></script>
+</body>
+</html>

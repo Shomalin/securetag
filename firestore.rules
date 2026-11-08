@@ -2,49 +2,93 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{db}/documents {
 
+    // An admin is any account that has a document in "admins" (added by hand in the console)
     function isAdmin() {
-      return request.auth != null && exists(/databases/$(db)/documents/admins/$(request.auth.uid));
+      return request.auth != null
+        && exists(/databases/$(db)/documents/admins/$(request.auth.uid));
     }
 
+    // ---------- Admins ----------
     match /admins/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if false;                       // add admins by hand in the console
+      allow write: if false;
     }
 
+    // ---------- Secret claim codes: admins only ----------
+    match /claimCodes/{tagId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.keys().hasOnly(['code', 'createdAt']);
+      allow update, delete: if false;
+    }
+
+    // ---------- Claims: proof that an owner knew the code ----------
+    // The "get" below reads the real code, even though the owner cannot.
+    match /claims/{tagId} {
+      allow read: if request.auth != null
+        && (resource == null || resource.data.ownerId == request.auth.uid);
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['ownerId', 'code', 'createdAt'])
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.code == get(/databases/$(db)/documents/claimCodes/$(tagId)).data.code;
+      allow update, delete: if false;
+    }
+
+    // ---------- Tags ----------
     match /tags/{tagId} {
-      allow get: if true;
+      allow get: if true;   // a finder opens one tag by its secret ID
       allow list: if request.auth != null && resource.data.ownerId == request.auth.uid;
       allow list: if isAdmin();
+
       allow create: if isAdmin()
-        && request.resource.data.keys().hasOnly(['itemName','ownerId','publicNote','status','batch','createdAt'])
+        && request.resource.data.keys().hasOnly(['itemName', 'ownerId', 'publicNote', 'status', 'batch', 'createdAt'])
         && request.resource.data.status == 'unclaimed'
         && request.resource.data.ownerId == null;
+
       allow delete: if false;
-      // owner: activate or edit own tag, but never a disabled one
+
+      // Owner edits their own tag (never a disabled one)
       allow update: if request.auth != null
+        && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == request.auth.uid
-        && (resource.data.ownerId == request.auth.uid || resource.data.ownerId == null)
         && resource.data.status != 'disabled'
-        && request.resource.data.status in ['active','lost'];
-      // admin: may only change status (disable / enable)
+        && request.resource.data.status in ['active', 'lost']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'itemName', 'publicNote']);
+
+      // First activation: needs a valid claim for this tag
+      allow update: if request.auth != null
+        && resource.data.ownerId == null
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.status == 'active'
+        && get(/databases/$(db)/documents/claims/$(tagId)).data.ownerId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerId', 'status', 'itemName', 'publicNote']);
+
+      // Admin can only change the status (disable / enable)
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
     }
 
+    // ---------- Messages ----------
     match /messages/{id} {
-      allow create: if request.resource.data.keys().hasOnly(['tagId','ownerId','text','contact','read','createdAt'])
+      allow create: if request.resource.data.keys().hasOnly(['tagId', 'ownerId', 'text', 'contact', 'read', 'createdAt'])
         && request.resource.data.text is string
-        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
-        && request.resource.data.contact is string && request.resource.data.contact.size() <= 100
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 500
+        && request.resource.data.contact is string
+        && request.resource.data.contact.size() <= 100
         && request.resource.data.read == false
         && get(/databases/$(db)/documents/tags/$(request.resource.data.tagId)).data.ownerId == request.resource.data.ownerId
-        && get(/databases/$(db)/documents/tags/$(request.resource.data.tagId)).data.status in ['active','lost'];
+        && get(/databases/$(db)/documents/tags/$(request.resource.data.tagId)).data.status in ['active', 'lost'];
+
       allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
-      allow update: if request.auth != null && resource.data.ownerId == request.auth.uid
+
+      allow update: if request.auth != null
+        && resource.data.ownerId == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+
       allow delete: if false;
     }
 
+    // ---------- Users ----------
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }

@@ -1,17 +1,58 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;600&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/styles.css"><title>SecureTag Admin</title>
-<style>#sheet{display:none}.cell{border:1px dashed #888;padding:8px;text-align:center;font:600 11px monospace;break-inside:avoid}.cell img,.cell canvas{max-width:100%}
-@media print{.wrap{display:none}#sheet{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}}select{font:inherit;padding:8px;border:2px solid var(--ink);border-radius:8px}</style></head><body>
-<div class="wrap"><nav><a class="logo" href="index.html">SecureTag Admin</a><button class="btn sm alt" id="out">Log out</button></nav>
-<div id="gate"><p>Checking access...</p></div>
-<main id="main" hidden>
-<div class="panel"><h2 style="font-size:1.2rem">Generate a batch of tags</h2>
-<label for="count">How many tags? (1-200)</label><input id="count" type="number" min="1" max="200" value="10">
-<label for="label">Batch label (for your records)</label><input id="label" placeholder="Keychains, Nov 2026" maxlength="60">
-<p><button class="btn" id="gen">Generate tags</button></p><div id="genMsg" class="banner ok" hidden></div></div>
-<div class="panel"><div class="row"><h2 style="font-size:1.2rem;margin:0">All tags <span id="total" class="muted"></span></h2>
-<div><select id="batch" aria-label="Filter by batch"></select> <select id="stat" aria-label="Filter by status"><option value="">All statuses</option><option>unclaimed</option><option>active</option><option>lost</option><option>disabled</option></select></div></div>
-<p><button class="btn sm" id="csv">Download CSV</button> <button class="btn sm alt" id="print">Print QR sheet</button></p>
-<div id="list"></div></div></main></div>
-<div id="sheet"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="js/admin.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <title>SecureTag Admin</title>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="index.html">SecureTag Admin</a>
+      <button class="btn sm alt" id="logout">Log out</button>
+    </nav>
+
+    <div id="gate"><p>Checking access...</p></div>
+
+    <main id="main" hidden>
+      <div class="panel">
+        <h2 style="font-size: 1.2rem;">Generate a batch of tags</h2>
+        <label for="count">How many tags? (1-200)</label>
+        <input id="count" type="number" min="1" max="200" value="10">
+        <label for="batchLabel">Batch label (for your records)</label>
+        <input id="batchLabel" placeholder="Cat stickers, Nov 2026" maxlength="60">
+        <p><button class="btn" id="generate">Generate tags</button></p>
+        <div id="generateMessage" class="banner ok" hidden></div>
+      </div>
+
+      <div class="panel">
+        <div class="row">
+          <h2 style="font-size: 1.2rem; margin: 0;">All tags <span id="total" class="muted"></span></h2>
+          <div>
+            <select id="batchFilter" aria-label="Filter by batch"></select>
+            <select id="statusFilter" aria-label="Filter by status">
+              <option value="">All statuses</option>
+              <option>unclaimed</option><option>active</option><option>lost</option><option>disabled</option>
+            </select>
+          </div>
+        </div>
+        <p>
+          <button class="btn sm" id="exportSvg">Download QR codes (SVG zip)</button>
+          <button class="btn sm" id="exportCsv">Download CSV with claim codes</button>
+          <button class="btn sm alt" id="printSheet">Print QR sheet</button>
+        </p>
+        <div id="list"></div>
+      </div>
+    </main>
+  </div>
+
+  <div id="sheet"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>

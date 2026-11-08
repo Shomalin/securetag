@@ -1,87 +1,170 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
+// Admin portal: create batches of tags, then export QR codes and claim codes.
+import { auth, db } from './firebase.js';
+import { waitForUser, logout } from './store.js';
+import { doc, getDoc, updateDoc, collection, getDocs, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { $, esc, finderUrl, showBanner, download } from './ui.js';
+import { generateTagId, generateClaimCode, formatClaimCode } from './codes.js';
+import { qrSvg } from './qr.js';
 
-const db = getFirestore(initializeApp(firebaseConfig)), auth = getAuth();
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const base = location.href.replace(/[^/]*$/, '') + 'finder.html?t=';
-let all = [];
+let allTags = [];   // every tag, kept up to date live
 
-$('out').onclick = async () => { await signOut(auth); location.href = 'index.html'; };
-const user = await new Promise(r => { const off = onAuthStateChanged(auth, u => { off(); r(u); }); });
+// ---------- Only admins get in ----------
+$('logout').onclick = async () => { await logout(); location.href = 'index.html'; };
+
+const user = await waitForUser();
 if (!user) location.href = 'login.html';
-let isAdmin = false;
-try { isAdmin = (await getDoc(doc(db, 'admins', user.uid))).exists(); } catch (e) {}
-if (!isAdmin) $('gate').innerHTML = '<div class="banner lost">This account is not an admin.</div>';
-else { $('gate').hidden = true; $('main').hidden = false; start(); }
 
-// 10 random characters from an alphabet without look-alikes (no 0/o, 1/l/i)
-const ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
-const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(10)), b => ALPHA[b % ALPHA.length]).join('');
-
-function start() {
-  onSnapshot(collection(db, 'tags'), s => {
-    all = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    const sel = $('batch'), cur = sel.value;
-    sel.innerHTML = '<option value="">All batches</option>' + [...new Set(all.map(t => t.batch || ''))].filter(Boolean).map(b => `<option>${esc(b)}</option>`).join('');
-    sel.value = cur; render();
-  }, e => { $('list').innerHTML = '<div class="banner lost">' + esc(e.message) + '</div>'; });
-  $('batch').onchange = $('stat').onchange = render;
-}
-const shown = () => all.filter(t => (!$('batch').value || t.batch === $('batch').value) && (!$('stat').value || t.status === $('stat').value));
-
-function render() {
-  const rows = shown();
-  $('total').textContent = `(${rows.length} of ${all.length})`;
-  $('list').innerHTML = rows.slice(0, 100).map(t => `<div class="msgitem"><div class="row"><div>
-    <strong>${esc(t.id)}</strong> <span class="pill ${esc(t.status)}">${esc(t.status)}</span>
-    <div class="muted">${esc(t.itemName || 'not claimed')} ${t.batch ? ' · ' + esc(t.batch) : ''}</div></div>
-    <div><button class="btn sm alt" data-copy="${esc(t.id)}">Copy link</button>
-    <button class="btn sm alt" data-tog="${esc(t.id)}" data-s="${esc(t.status)}">${t.status === 'disabled' ? 'Enable' : 'Disable'}</button></div></div></div>`).join('')
-    + (rows.length > 100 ? '<p class="muted">Showing the first 100. Use the filters or CSV for the rest.</p>' : '');
+// An admin is an account that has a document in the "admins" collection
+const adminDoc = await getDoc(doc(db, 'admins', user.uid)).catch(() => null);
+if (adminDoc && adminDoc.exists()) {
+  $('gate').hidden = true;
+  $('main').hidden = false;
+  watchTags();
+} else {
+  $('gate').innerHTML = '<div class="banner lost">This account is not an admin.</div>';
 }
 
-document.addEventListener('click', async e => {
-  const d = e.target.dataset;
+// ---------- The tag list ----------
+function watchTags() {
+  onSnapshot(collection(db, 'tags'), snap => {
+    allTags = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    refreshBatchFilter();
+    renderList();
+  }, error => showBanner($('generateMessage'), error.message));
+
+  $('batchFilter').onchange = renderList;
+  $('statusFilter').onchange = renderList;
+}
+
+function refreshBatchFilter() {
+  const select = $('batchFilter');
+  const selected = select.value;
+  const batches = [...new Set(allTags.map(t => t.batch).filter(Boolean))];
+
+  select.innerHTML = '<option value="">All batches</option>' +
+    batches.map(b => `<option>${esc(b)}</option>`).join('');
+  select.value = selected;
+}
+
+// The tags that match the current filters
+function filteredTags() {
+  const batch = $('batchFilter').value;
+  const status = $('statusFilter').value;
+  return allTags.filter(t => (!batch || t.batch === batch) && (!status || t.status === status));
+}
+
+function renderList() {
+  const tags = filteredTags();
+  $('total').textContent = `(${tags.length} of ${allTags.length})`;
+
+  const rows = tags.slice(0, 100).map(tag => `
+    <div class="msgitem">
+      <div class="row">
+        <div>
+          <strong>${esc(tag.id)}</strong>
+          <span class="pill ${esc(tag.status)}">${esc(tag.status)}</span>
+          <div class="muted">${esc(tag.itemName || 'not claimed')}${tag.batch ? ' · ' + esc(tag.batch) : ''}</div>
+        </div>
+        <div>
+          <button class="btn sm alt" data-copy="${esc(tag.id)}">Copy link</button>
+          <button class="btn sm alt" data-toggle="${esc(tag.id)}">${tag.status === 'disabled' ? 'Enable' : 'Disable'}</button>
+        </div>
+      </div>
+    </div>`);
+
+  const more = tags.length > 100 ? '<p class="muted">Showing the first 100. Use the filters or exports for the rest.</p>' : '';
+  $('list').innerHTML = rows.join('') + more;
+}
+
+document.addEventListener('click', async event => {
+  const data = event.target.dataset;
   try {
-    if (d.copy) navigator.clipboard.writeText(base + d.copy);
-    if (d.tog) { // re-enable goes back to unclaimed or active depending on whether it has an owner
-      const t = all.find(x => x.id === d.tog);
-      await updateDoc(doc(db, 'tags', d.tog), { status: d.s === 'disabled' ? (t.ownerId ? 'active' : 'unclaimed') : 'disabled' });
-    }
-  } catch (err) { alert(err.message); }
+    if (data.copy) navigator.clipboard.writeText(finderUrl(data.copy));
+    if (data.toggle) await toggleDisabled(data.toggle);
+  } catch (error) {
+    alert(error.message);
+  }
 });
 
-$('gen').onclick = async () => {
-  const n = Math.min(200, Math.max(1, parseInt($('count').value) || 0)), label = $('label').value.trim() || 'Untitled batch';
-  const ids = new Set(); while (ids.size < n) ids.add(newId());
+// Disable a tag, or bring it back (to "active" if it has an owner, otherwise "unclaimed")
+async function toggleDisabled(tagId) {
+  const tag = allTags.find(t => t.id === tagId);
+  const restoredStatus = tag.ownerId ? 'active' : 'unclaimed';
+  await updateDoc(doc(db, 'tags', tagId), { status: tag.status === 'disabled' ? restoredStatus : 'disabled' });
+}
+
+// ---------- Generate a batch ----------
+$('generate').onclick = async () => {
+  const count = Math.min(200, Math.max(1, parseInt($('count').value) || 0));
+  const label = $('batchLabel').value.trim() || 'Untitled batch';
+
+  // Make sure every ID in the batch is different
+  const ids = new Set();
+  while (ids.size < count) ids.add(generateTagId());
+
   try {
-    const b = writeBatch(db), now = Date.now();
-    ids.forEach(id => b.set(doc(db, 'tags', id), { itemName: '', ownerId: null, publicNote: '', status: 'unclaimed', batch: label, createdAt: now }));
-    await b.commit();
-    $('genMsg').textContent = `Created ${n} tags in "${label}". Filter by this batch to print or export them.`;
-    $('genMsg').hidden = false; $('batch').value = label; render();
-  } catch (err) { $('genMsg').className = 'banner lost'; $('genMsg').textContent = err.message; $('genMsg').hidden = false; }
+    const batch = writeBatch(db);
+    const now = Date.now();
+
+    for (const id of ids) {
+      // The public tag: nothing secret in here
+      batch.set(doc(db, 'tags', id), {
+        itemName: '', ownerId: null, publicNote: '', status: 'unclaimed', batch: label, createdAt: now
+      });
+      // The secret claim code: only admins can read this collection
+      batch.set(doc(db, 'claimCodes', id), { code: generateClaimCode(), createdAt: now });
+    }
+    await batch.commit();
+
+    $('generateMessage').className = 'banner ok';
+    showBanner($('generateMessage'), `Created ${count} tags in "${label}". Use the export buttons below.`);
+    $('batchFilter').value = label;
+    renderList();
+  } catch (error) {
+    $('generateMessage').className = 'banner lost';
+    showBanner($('generateMessage'), error.message);
+  }
 };
 
-$('csv').onclick = () => {
-  const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  const csv = 'tag_id,url,status,batch\n' + shown().map(t => [t.id, base + t.id, t.status, t.batch].map(q).join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'securetag-tags.csv'; a.click();
+// ---------- Exports ----------
+// Tags that can still be used on a sticker (not disabled)
+const printableTags = () => filteredTags().filter(t => t.status !== 'disabled');
+
+// 1. One SVG per tag, zipped. Give these to the designers.
+$('exportSvg').onclick = async () => {
+  const tags = printableTags();
+  if (!tags.length) return alert('No tags match the current filters.');
+
+  const zip = new JSZip();
+  for (const tag of tags) zip.file(`${tag.id}.svg`, qrSvg(finderUrl(tag.id)));
+  download('securetag-qr-svg.zip', await zip.generateAsync({ type: 'blob' }));
 };
 
-$('print').onclick = () => {
-  const rows = shown().filter(t => t.status === 'unclaimed' || t.status === 'active' || t.status === 'lost');
-  if (!rows.length) return alert('No tags to print. Check your filters.');
-  if (rows.length > 100 && !confirm(`Print ${rows.length} QR codes?`)) return;
-  const sheet = $('sheet'); sheet.innerHTML = '';
-  rows.forEach(t => {
-    const c = document.createElement('div'); c.className = 'cell';
-    new QRCode(c, { text: base + t.id, width: 130, height: 130, correctLevel: QRCode.CorrectLevel.M });
-    c.append(document.createElement('br'), t.id); sheet.append(c);
-  });
+// 2. A spreadsheet linking each tag to its claim code (for the packaging). Keep it private.
+$('exportCsv').onclick = async () => {
+  const tags = filteredTags();
+  if (!tags.length) return alert('No tags match the current filters.');
+
+  const codeSnap = await getDocs(collection(db, 'claimCodes'));
+  const codes = Object.fromEntries(codeSnap.docs.map(d => [d.id, d.data().code]));
+
+  const cell = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
+  const lines = tags.map(tag =>
+    [tag.id, finderUrl(tag.id), codes[tag.id] ? formatClaimCode(codes[tag.id]) : '', tag.status, tag.batch]
+      .map(cell).join(','));
+
+  const csv = 'tag_id,url,claim_code,status,batch\n' + lines.join('\n');
+  download('securetag-tags.csv', new Blob([csv], { type: 'text/csv' }));
+};
+
+// 3. A quick printable sheet of QR codes
+$('printSheet').onclick = () => {
+  const tags = printableTags();
+  if (!tags.length) return alert('No tags match the current filters.');
+  if (tags.length > 100 && !confirm(`Print ${tags.length} QR codes?`)) return;
+
+  $('sheet').innerHTML = tags.map(tag =>
+    `<div class="cell">${qrSvg(finderUrl(tag.id))}<br>${esc(tag.id)}</div>`).join('');
   setTimeout(() => window.print(), 300);
 };
